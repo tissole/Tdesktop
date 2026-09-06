@@ -81,4 +81,9 @@ if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
         $<LINK_ONLY:desktop-app::external_vpx>
         $<TARGET_FILE:desktop-app::external_vpx>)
 endif()
+if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
+    # Local zlib uses different file names than upstream expects.
+    set(ZLIB_LIBRARY_DEBUG ${libs_loc}/zlib/Debug/libzsd.lib)
+    set(ZLIB_LIBRARY_RELEASE ${libs_loc}/zlib/Release/libzs.lib)
+endif()
 add_subdirectory(Telegram)
