@@ -65,4 +65,20 @@ set(desktop_app_skip_libs
 set(MSVC_DEBUG_INFORMATION_FORMAT "OldStyle" CACHE STRING "MSVC debug information format" FORCE)
 
 add_subdirectory(cmake)
+if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
+    # Our FFmpeg is built with the MSVC toolchain (.lib), not MinGW (.a).
+    set_property(TARGET external_ffmpeg PROPERTY INTERFACE_LINK_LIBRARIES
+        ${libs_loc}/ffmpeg/libavfilter/avfilter.lib
+        ${libs_loc}/ffmpeg/libavformat/avformat.lib
+        ${libs_loc}/ffmpeg/libavcodec/avcodec.lib
+        ${libs_loc}/ffmpeg/libswresample/swresample.lib
+        ${libs_loc}/ffmpeg/libswscale/swscale.lib
+        ${libs_loc}/ffmpeg/libavutil/avutil.lib
+        $<LINK_ONLY:desktop-app::external_openh264>
+        $<TARGET_FILE:desktop-app::external_openh264>
+        $<LINK_ONLY:desktop-app::external_opus>
+        $<TARGET_FILE:desktop-app::external_opus>
+        $<LINK_ONLY:desktop-app::external_vpx>
+        $<TARGET_FILE:desktop-app::external_vpx>)
+endif()
 add_subdirectory(Telegram)

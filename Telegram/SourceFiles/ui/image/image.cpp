@@ -41,6 +41,32 @@ namespace {
 
 } // namespace
 
+bool IsBlank(const QImage &image) {
+	if (image.isNull() || image.width() < 2 || image.height() < 2) {
+		return true;
+	}
+	constexpr auto kBlankColumns = 24;
+	constexpr auto kBlankRows = 18;
+	constexpr auto kBlankTolerance = 8;
+	const auto first = image.pixel(0, 0);
+	const auto firstR = qRed(first);
+	const auto firstG = qGreen(first);
+	const auto firstB = qBlue(first);
+	for (auto row = 0; row < kBlankRows; ++row) {
+		for (auto column = 0; column < kBlankColumns; ++column) {
+			const auto pixel = image.pixel(
+				column * (image.width() - 1) / (kBlankColumns - 1),
+				row * (image.height() - 1) / (kBlankRows - 1));
+			if (qAbs(qRed(pixel) - firstR) > kBlankTolerance
+				|| qAbs(qGreen(pixel) - firstG) > kBlankTolerance
+				|| qAbs(qBlue(pixel) - firstB) > kBlankTolerance) {
+				return false;
+			}
+		}
+	}
+	return true;
+}
+
 } // namespace Images
 
 Image::Image(const QString &path)

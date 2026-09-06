@@ -272,8 +272,8 @@ opus pcm ra ram spx tak tta usac wav webma wma wv wsd"_q);
 
 	static const auto kDocument = SplitExtensions(u"\
 pdf doc docx ppt pptx pps ppsx xls xlsx txt rtf odt ods odp csv text log tl \
-tex xspf xml djvu diag ps ost kml pub epub mobi cbr cbz fb2 prc ris pem p7b \
-m3u m3u8 wpd wpl htm html xhtml key"_q);
+tex xspf xml djvu diag ps ost kml pub epub mobi cb7 cbt cbr cbz fb2 prc ris pem p7b \
+m3u m3u8 wpd wpl htm html xhtml key azw azw3 azw4 pdb djv chm xps oxps md markdown fbz"_q);
 
 	static const auto kArchive = SplitExtensions(u"\
 7z ace arj boz bz2 gz rar tar tgz xz z zip zst"_q);

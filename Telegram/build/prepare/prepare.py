@@ -1975,11 +1975,6 @@ mac:
 release:
     buildTd Release
 """)
-stage('mupdf', """
-    git clone --depth 1 --branch 1.27.2 https://github.com/ArtifexSoftware/mupdf.git mupdf
-    cd mupdf
-    git submodule update --init --depth 1
-""")
 
 if win:
     currentCodePage = subprocess.run('chcp', capture_output=True, shell=True, text=True, env=modifiedEnv).stdout.strip().split()[-1]

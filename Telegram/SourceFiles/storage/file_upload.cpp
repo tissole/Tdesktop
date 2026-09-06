@@ -526,11 +526,7 @@ void Uploader::upload(
 					file->thumb,
 					ThumbnailFormat(file->filemime),
 					file->thumbbytes));
-		LOG(("Uploader::upload: document type=%1, file->thumb isNull=%2, thumb size=%3x%4"
-			).arg(int(file->type)
-			).arg(file->thumb.isNull() ? "yes" : "no"
-			).arg(file->thumb.width()
-			).arg(file->thumb.height()));
+		document->uploadingData = std::make_unique<Data::UploadState>(
 		document->uploadingData = std::make_unique<Data::UploadState>(
 			document->size);
 		preparing = (file->animationJob != nullptr)
@@ -544,9 +540,6 @@ void Uploader::upload(
 			}
 			if (!file->thumb.isNull()) {
 				active->setThumbnail(file->thumb);
-				const auto &thumb = active->thumbnail();
-				LOG(("Uploader::upload: setThumbnail called, active thumbnail now isNull=%1"
-					).arg(!thumb || thumb->isNull() ? "yes" : "no"));
 			}
 		}
 		if (!file->goodThumbnailBytes.isEmpty()) {

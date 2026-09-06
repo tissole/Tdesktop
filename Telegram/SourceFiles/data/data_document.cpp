@@ -652,7 +652,8 @@ void DocumentData::setattributes(
 				_additional = nullptr;
 			}
 		}
-		if (!Core::NameTypeAllowsThumbnail(_nameType)) {
+		if (!Core::NameTypeAllowsThumbnail(_nameType)
+			&& !_filename.endsWith(u".chm"_q, Qt::CaseInsensitive)) {
 			_inlineThumbnailBytes = {};
 			_flags &= ~Flag::InlineThumbnailIsPath;
 			_thumbnail.clear();
@@ -908,7 +909,8 @@ void DocumentData::updateThumbnails(
 		const ImageWithLocation &videoThumbnail,
 		bool isPremiumSticker) {
 	if (!_filename.isEmpty()
-		&& !Core::NameTypeAllowsThumbnail(Core::DetectNameType(_filename))) {
+		&& !Core::NameTypeAllowsThumbnail(Core::DetectNameType(_filename))
+		&& !_filename.endsWith(u".chm"_q, Qt::CaseInsensitive)) {
 		return;
 	}
 	if (!inlineThumbnail.bytes.isEmpty()

@@ -102,3 +102,11 @@ private:
 	mutable base::flat_map<uint64, QPixmap> _cache;
 
 };
+
+namespace Images {
+
+// True when every sampled dot is essentially the same color:
+// blank photo, black or white video frame, single-color placeholder.
+[[nodiscard]] bool IsBlank(const QImage &image);
+
+} // namespace Images

@@ -5115,6 +5115,7 @@ void ApiWrap::sendFiles(
 		for (const auto &task : tasks) {
 			album->items.emplace_back(task->id());
 		}
+		album->expectedCount = uint32(album->items.size());
 	}
 	_fileLoader->addTasks(std::move(tasks));
 }
@@ -5930,7 +5931,14 @@ void ApiWrap::uploadAlbumMedia(
 		const MTPInputMedia &media) {
 	const auto localId = item->fullId();
 	const auto failed = [=] {
-
+		const auto albumIt = _sendingAlbums.find(groupId.raw());
+		if (albumIt == _sendingAlbums.end()) {
+			return;
+		}
+		if (const auto alive = _session->data().message(localId)) {
+			albumIt->second->removeItem(alive);
+		}
+		sendAlbumIfReady(albumIt->second.get());
 	};
 	request(MTPmessages_UploadMedia(
 		MTP_flags(0),
@@ -6240,9 +6248,6 @@ void ApiWrap::sendAlbumWithUploaded(
 		not_null<HistoryItem*> item,
 		const MessageGroupId &groupId,
 		const MTPInputMedia &media) {
-	LOG(("sendAlbumWithUploaded: item=%1, groupId=%2"
-		).arg(item->id.bare
-		).arg(groupId.value));
 	const auto localId = item->fullId();
 	const auto randomId = base::RandomValue<uint64>();
 	_session->data().registerMessageRandomId(randomId, localId);
@@ -6250,8 +6255,6 @@ void ApiWrap::sendAlbumWithUploaded(
 	const auto albumIt = _sendingAlbums.find(groupId.raw());
 	Assert(albumIt != _sendingAlbums.end());
 	const auto &album = albumIt->second;
-	LOG(("sendAlbumWithUploaded: filling media for album, items=%1"
-		).arg(album->items.size()));
 	album->fillMedia(item, media, randomId);
 	sendAlbumIfReady(album.get());
 }
@@ -6275,18 +6278,11 @@ void ApiWrap::sendAlbumWithCancelled(
 }
 
 void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
-	LOG(("sendAlbumIfReady: album=%1, items=%2, expected=%3, sent=%4"
-		).arg(album->groupId
-		).arg(album->items.size()
-		).arg(album->expectedCount
-		).arg(album->sent ? 1 : 0));
 	if (album->sent) {
-		LOG(("sendAlbumIfReady: album already sent, returning"));
 		return;
 	}
 	const auto groupId = album->groupId;
 	if (album->items.empty()) {
-		LOG(("sendAlbumIfReady: album items empty, removing"));
 		_sendingAlbums.remove(groupId);
 		return;
 	}
@@ -6295,20 +6291,16 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 	medias.reserve(album->items.size());
 	for (const auto &item : album->items) {
 		if (!item.media) {
-			LOG(("sendAlbumIfReady: item %1 has no media, waiting").arg(item.msgId.msg.bare));
 			return;
 		} else if (!sample) {
 			sample = _session->data().message(item.msgId);
 		}
 		medias.push_back(*item.media);
 	}
-	if (album->items.size() != album->expectedCount) {
-		LOG(("sendAlbumIfReady: waiting for more items, have=%1, expected=%2"
-			).arg(album->items.size()
-			).arg(album->expectedCount));
+	if (album->expectedCount > 0
+		&& album->items.size() != album->expectedCount) {
 		return;
 	}
-	LOG(("sendAlbumIfReady: all items ready, sending album with %1 items").arg(medias.size()));
 	if (!sample) {
 		_sendingAlbums.remove(groupId);
 		return;

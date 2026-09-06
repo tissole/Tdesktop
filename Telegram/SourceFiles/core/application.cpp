@@ -117,6 +117,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <ksandbox.h>
 
+#include <QtPlugin>
+
+Q_IMPORT_PLUGIN(QSQLiteDriverPlugin)
+
 namespace Core {
 namespace {
 

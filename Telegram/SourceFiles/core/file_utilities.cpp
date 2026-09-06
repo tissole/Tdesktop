@@ -13,7 +13,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/platform/base_platform_file_utilities.h"
 #include "platform/platform_file_utilities.h"
 #include "core/application.h"
+#include "base/integration.h"
 #include "base/unixtime.h"
+#include "logs.h"
 #include "ui/delayed_activation.h"
 #include "ui/chat/attach/attach_extensions.h"
 #include "main/main_session.h"
@@ -21,6 +23,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include <QtWidgets/QFileDialog>
 #include <QtCore/QCoreApplication>
+#include <QtCore/QFileInfo>
+#include <QtCore/QHash>
+#include <QtCore/QMutex>
 #include <QtCore/QStandardPaths>
 #include <QtGui/QDesktopServices>
 
@@ -423,3 +428,67 @@ bool GetDefault(
 
 } // namespace internal
 } // namespace FileDialog
+
+namespace Core {
+namespace {
+
+auto HelperBinaryCacheMutex = QMutex();
+auto HelperBinaryCache = QHash<QString, QString>();
+
+[[nodiscard]] QStringList HelperCandidates(const QString &name) {
+	auto result = QStringList();
+	const auto overrideKey = u"TDESKTOP_"_q + name.toUpper() + u"_PATH"_q;
+	if (const auto overridePath = QString::fromLocal8Bit(
+		qgetenv(overrideKey.toUtf8().constData()));
+		!overridePath.isEmpty()) {
+		result.push_back(overridePath);
+	}
+	if (base::Integration::Exists()) {
+#ifdef Q_OS_WIN
+		result.push_back(cExeDir() + name + u".exe"_q);
+#else
+		result.push_back(cExeDir() + name);
+#endif
+	}
+	return result;
+}
+
+[[nodiscard]] bool IsRunnableHelper(const QString &path) {
+	const auto info = QFileInfo(path);
+	return info.isFile() && info.isExecutable();
+}
+
+} // namespace
+
+QString HelperBinaryPath(const QString &name) {
+	QMutexLocker lock(&HelperBinaryCacheMutex);
+	if (const auto it = HelperBinaryCache.find(name);
+		it != HelperBinaryCache.cend()) {
+		return it.value();
+	}
+	const auto usable = [](const QString &path) {
+		return !path.isEmpty() && IsRunnableHelper(path);
+	};
+	auto resolved = QString();
+	for (const auto &candidate : HelperCandidates(name)) {
+		if (usable(candidate)) {
+			resolved = candidate;
+			break;
+		}
+	}
+	if (resolved.isEmpty()) {
+		resolved = QStandardPaths::findExecutable(name);
+		if (!usable(resolved)) {
+			resolved = QString();
+		}
+	}
+	if (resolved.isEmpty()) {
+		LOG(("App Warning: external helper '%1' is unavailable.").arg(name));
+	} else {
+		LOG(("App Info: external helper '%1' at '%2'.").arg(name, resolved));
+	}
+	HelperBinaryCache[name] = resolved;
+	return resolved;
+}
+
+} // namespace Core

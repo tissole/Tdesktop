@@ -1415,27 +1415,73 @@ public:
 			return false;
 		}
 
+		constexpr auto kMaxAudioCoverBytes = 20 * 1024 * 1024;
+		const auto attachedPic = [&](int index) {
+			const auto &packet = fmtContext->streams[index]->attached_pic;
+			if (!packet.size || packet.size > kMaxAudioCoverBytes) {
+				return QByteArray();
+			}
+			return QByteArray((const char*)packet.data, packet.size);
+		};
+		const auto readAttachment = [&](int index) {
+			auto result = QByteArray();
+			auto packet = av_packet_alloc();
+			if (!packet) {
+				return result;
+			}
+			while (result.size() <= kMaxAudioCoverBytes
+				&& av_read_frame(fmtContext, packet) >= 0) {
+				if (packet->stream_index == index && packet->size > 0) {
+					result.append((const char*)packet->data, int(packet->size));
+				}
+				av_packet_unref(packet);
+			}
+			av_packet_free(&packet);
+			return (result.size() > kMaxAudioCoverBytes)
+				? QByteArray()
+				: result;
+		};
+		const auto streamMentionsCover = [](AVStream *stream) {
+			for (const auto &key : { "title", "comment", "filename" }) {
+				if (const auto tag = av_dict_get(stream->metadata, key, nullptr, 0)) {
+					const auto value = QString::fromUtf8(tag->value).toLower();
+					if (value.contains(u"cover"_q) || value.contains(u"front"_q)) {
+						return true;
+					}
+				}
+			}
+			return false;
+		};
+		const auto streamIsImageAttachment = [](AVStream *stream) {
+			if (const auto tag = av_dict_get(stream->metadata, "mimetype", nullptr, 0)) {
+				return QString::fromLatin1(tag->value).toLower().startsWith(u"image/"_q);
+			}
+			return false;
+		};
+		const auto decodeCover = [&](QByteArray bytes) {
+			if (bytes.isEmpty() || !_cover.isNull()) {
+				return;
+			}
+			auto read = Images::Read({
+				.content = bytes,
+				.forceOpaque = true,
+			});
+			if (!read.image.isNull()) {
+				_cover = std::move(read.image);
+				_coverBytes = bytes;
+				_coverFormat = read.format;
+			}
+		};
+
+		auto attached = std::vector<int>();
+		auto attachments = std::vector<int>();
 		for (int32 i = 0, l = fmtContext->nb_streams; i < l; ++i) {
 			const auto stream = fmtContext->streams[i];
 			if (stream->disposition & AV_DISPOSITION_ATTACHED_PIC) {
-				if (!_cover.isNull()) {
-					continue;
-				}
-				const auto &packet = stream->attached_pic;
-				if (packet.size) {
-					const auto coverBytes = QByteArray(
-						(const char*)packet.data,
-						packet.size);
-					auto read = Images::Read({
-						.content = coverBytes,
-						.forceOpaque = true,
-					});
-					if (!read.image.isNull()) {
-						_cover = std::move(read.image);
-						_coverBytes = coverBytes;
-						_coverFormat = read.format;
-					}
-				}
+				attached.push_back(i);
+			} else if (stream->codecpar->codec_type == AVMEDIA_TYPE_ATTACHMENT
+				&& streamIsImageAttachment(stream)) {
+				attachments.push_back(i);
 			} else if (stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
 				DEBUG_LOG(("Audio Read Error: Found video stream in file '%1', data size '%2', stream %3.")
 					.arg(_file.name())
@@ -1443,6 +1489,24 @@ public:
 					.arg(i));
 				return false;
 			}
+		}
+		const auto decodeFirstValid = [&](const std::vector<int> &indices, bool attachment) {
+			for (auto pass = 0; pass != 2 && _cover.isNull(); ++pass) {
+				for (const auto index : indices) {
+					const auto preferred = streamMentionsCover(
+						fmtContext->streams[index]);
+					if ((pass == 0) != preferred) {
+						continue;
+					}
+					decodeCover(attachment
+						? readAttachment(index)
+						: attachedPic(index));
+				}
+			}
+		};
+		decodeFirstValid(attached, false);
+		if (_cover.isNull()) {
+			decodeFirstValid(attachments, true);
 		}
 
 		extractMetaData(fmtContext->streams[streamId]->metadata);
@@ -1462,11 +1526,6 @@ public:
 		trySet(_performer, dict, "artist");
 		trySet(_performer, dict, "performer");
 		trySet(_performer, dict, "album_artist");
-		//for (AVDictionaryEntry *tag = av_dict_get(dict, "", 0, AV_DICT_IGNORE_SUFFIX); tag; tag = av_dict_get(dict, "", tag, AV_DICT_IGNORE_SUFFIX)) {
-		//	const char *key = tag->key;
-		//	const char *value = tag->value;
-		//	QString tmp = QString::fromUtf8(value);
-		//}
 	}
 
 	int sampleSize() override {

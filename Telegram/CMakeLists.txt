@@ -67,6 +67,8 @@ endif()
 
 set_target_properties(Telegram PROPERTIES AUTOMOC ON)
 
+find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Sql REQUIRED)
+
 target_link_libraries(Telegram
 PRIVATE
     tdesktop::lib_fido2
@@ -104,8 +106,14 @@ PRIVATE
     desktop-app::external_openssl
     desktop-app::external_openal
     desktop-app::external_xxhash
-    desktop-app::external_mupdf
+    Qt${QT_VERSION_MAJOR}::Sql
+    Qt${QT_VERSION_MAJOR}::QSQLiteDriverPlugin
     runtimeobject.lib
+)
+
+target_compile_options(Telegram
+PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/WX->
 )
 
 if (NOT DESKTOP_APP_DISABLE_SWIFT6)

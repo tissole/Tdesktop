@@ -121,3 +121,12 @@ bool GetDefault(
 
 } // namespace internal
 } // namespace FileDialog
+
+namespace Core {
+
+// External helper binaries (7z, mutool, ...) ship beside the executable.
+// Resolved once per session: explicit override, app dir, then PATH.
+// Returns an empty string when the helper is missing or fails its probe.
+[[nodiscard]] QString HelperBinaryPath(const QString &name);
+
+} // namespace Core
