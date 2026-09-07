@@ -60,6 +60,53 @@ if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
     # Local zlib uses different file names than upstream expects.
     set(ZLIB_LIBRARY_DEBUG ${libs_loc}/zlib/Debug/libzsd.lib)
     set(ZLIB_LIBRARY_RELEASE ${libs_loc}/zlib/Release/libzs.lib)
+    # Prebuilt Qt recorded the upstream names in its own link interface,
+    # and it resolves them before the lines above run. Point them at the
+    # real files instead. Runs on every configure, nothing to maintain.
+    foreach(qt_lib Core Gui Widgets Network Svg OpenGL OpenGLWidgets Sql)
+        if (TARGET Qt6::${qt_lib})
+            get_target_property(qt_iface Qt6::${qt_lib} INTERFACE_LINK_LIBRARIES)
+            if (qt_iface)
+                string(REPLACE
+                    "zlib/Debug/zlibstaticd.lib"
+                    "zlib/Debug/libzsd.lib"
+                    qt_iface
+                    "${qt_iface}")
+                string(REPLACE
+                    "zlib/Release/zlibstatic.lib"
+                    "zlib/Release/libzs.lib"
+                    qt_iface
+                    "${qt_iface}")
+                set_target_properties(Qt6::${qt_lib} PROPERTIES
+                    INTERFACE_LINK_LIBRARIES "${qt_iface}")
+            endif()
+        endif()
+    endforeach()
+    # Qt's own zlib reference is a named target resolved while the shared
+    # include above still holds the upstream names. Repair it in place.
+    if (TARGET ZLIB::ZLIB)
+        set_target_properties(ZLIB::ZLIB PROPERTIES
+            IMPORTED_LOCATION_DEBUG ${libs_loc}/zlib/Debug/libzsd.lib
+            IMPORTED_LOCATION_RELEASE ${libs_loc}/zlib/Release/libzs.lib)
+    endif()
+endif()
+if (WIN32
+    AND NOT DESKTOP_APP_USE_PACKAGED
+    AND CMAKE_MSVC_DEBUG_INFORMATION_FORMAT STREQUAL "Embedded")
+    # Daily builds: drop the /DEBUG that common options force on every
+    # Debug link, so the linker writes no PDB. Crash builds
+    # (ProgramDatabase) keep it. Reapplied on every configure.
+    get_target_property(common_iface common_options INTERFACE_LINK_OPTIONS)
+    if (common_iface)
+        set(common_fixed "")
+        foreach(opt IN LISTS common_iface)
+            if (NOT opt MATCHES ":/DEBUG>$")
+                list(APPEND common_fixed "${opt}")
+            endif()
+        endforeach()
+        set_target_properties(common_options PROPERTIES
+            INTERFACE_LINK_OPTIONS "${common_fixed}")
+    endif()
 endif()
 
 set(desktop_app_skip_libs
