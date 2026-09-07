@@ -527,7 +527,6 @@ void Uploader::upload(
 					ThumbnailFormat(file->filemime),
 					file->thumbbytes));
 		document->uploadingData = std::make_unique<Data::UploadState>(
-		document->uploadingData = std::make_unique<Data::UploadState>(
 			document->size);
 		preparing = (file->animationJob != nullptr)
 			|| (file->videoSource != nullptr);

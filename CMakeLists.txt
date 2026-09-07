@@ -56,6 +56,11 @@ include(cmake/target_prepare_qrc.cmake)
 
 include(cmake/options.cmake)
 include(cmake/external/qt/package.cmake)
+if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
+    # Local zlib uses different file names than upstream expects.
+    set(ZLIB_LIBRARY_DEBUG ${libs_loc}/zlib/Debug/libzsd.lib)
+    set(ZLIB_LIBRARY_RELEASE ${libs_loc}/zlib/Release/libzs.lib)
+endif()
 
 set(desktop_app_skip_libs
     glibmm
@@ -80,10 +85,5 @@ if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
         $<TARGET_FILE:desktop-app::external_opus>
         $<LINK_ONLY:desktop-app::external_vpx>
         $<TARGET_FILE:desktop-app::external_vpx>)
-endif()
-if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
-    # Local zlib uses different file names than upstream expects.
-    set(ZLIB_LIBRARY_DEBUG ${libs_loc}/zlib/Debug/libzsd.lib)
-    set(ZLIB_LIBRARY_RELEASE ${libs_loc}/zlib/Release/libzs.lib)
 endif()
 add_subdirectory(Telegram)
