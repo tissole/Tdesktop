@@ -12,10 +12,6 @@ include(cmake/validate_special_target.cmake)
 include(cmake/version.cmake)
 desktop_app_parse_version(Telegram/build/version)
 
-if (NOT DEFINED CMAKE_CONFIGURATION_TYPES)
-    set(configuration_types_init 1)
-endif()
-
 project(Telegram
     LANGUAGES C CXX
     VERSION ${desktop_app_version_cmake}
@@ -25,12 +21,6 @@ project(Telegram
 
 if (APPLE)
     enable_language(OBJC OBJCXX)
-endif()
-
-if (configuration_types_init
-    AND CMAKE_CONFIGURATION_TYPES
-    AND NOT MinSizeRel IN_LIST CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_CONFIGURATION_TYPES "${CMAKE_CONFIGURATION_TYPES};MinSizeRel" CACHE STRING "" FORCE)
 endif()
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT Telegram)
@@ -92,10 +82,11 @@ if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)
 endif()
 if (WIN32
     AND NOT DESKTOP_APP_USE_PACKAGED
-    AND CMAKE_MSVC_DEBUG_INFORMATION_FORMAT STREQUAL "Embedded")
+    AND NOT CMAKE_MSVC_DEBUG_INFORMATION_FORMAT STREQUAL "ProgramDatabase")
     # Daily builds: drop the /DEBUG that common options force on every
-    # Debug link, so the linker writes no PDB. Crash builds
-    # (ProgramDatabase) keep it. Reapplied on every configure.
+    # Debug link, so the linker writes no PDB. Compiles keep their normal
+    # fast format. Only an explicit ProgramDatabase brings the full PDB
+    # back (crash debugging). Reapplied on every configure.
     get_target_property(common_iface common_options INTERFACE_LINK_OPTIONS)
     if (common_iface)
         set(common_fixed "")
@@ -113,8 +104,6 @@ set(desktop_app_skip_libs
     glibmm
     variant
 )
-
-set(MSVC_DEBUG_INFORMATION_FORMAT "OldStyle" CACHE STRING "MSVC debug information format" FORCE)
 
 add_subdirectory(cmake)
 if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED)

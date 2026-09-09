@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/history_widget.h"
+#include <QCollator>
 
 #include "api/api_compose_with_ai.h"
 #include "api/api_editing.h"
@@ -8299,6 +8300,12 @@ bool HistoryWidget::confirmSendingFiles(
 				localPaths.push_back(url.toLocalFile());
 			}
 		}
+		auto collator = QCollator();
+		collator.setNumericMode(true);
+		collator.setCaseSensitivity(Qt::CaseInsensitive);
+		ranges::sort(localPaths, [&](const auto &a, const auto &b) {
+			return collator.compare(a, b) < 0;
+		});
 		auto filtered = QList<QUrl>();
 		if (localPaths.size() == urls.size()) {
 			const auto kept = Data::FilterUploadDuplicates(

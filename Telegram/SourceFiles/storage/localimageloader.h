@@ -150,6 +150,8 @@ struct SendingAlbum {
 	bool musicPreparedBatching = false;
 	bool sent = false;
 	uint32 expectedCount = 0;
+	uint64 sendOrder = 0;
+	PeerId peerId;
 
 };
 

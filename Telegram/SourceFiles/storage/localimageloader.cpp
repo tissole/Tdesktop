@@ -278,7 +278,9 @@ struct SevenZipEntry {
 			pendingHasFolder = false;
 			if (const auto size = line.mid(7).trimmed().toULongLong();
 				size <= uint64(kSevenZipEntryCap)) {
-				result.push_back({ pendingName, size });
+				// 7z lists internal paths with '\', all matchers use '/'.
+			result.push_back({
+				QString(pendingName).replace(u'\\', u'/'), size });
 			}
 			pendingName = QString();
 		}
@@ -839,12 +841,8 @@ constexpr auto kPageRenderWidth = 640;
 		!piped.isEmpty()) {
 		return piped;
 	}
-	const auto tempPath = QDir::tempPath()
-		+ u"/tdesktop_thumb_"_q
-		+ QUuid::createUuid().toString(QUuid::WithoutBraces)
-		+ u".png"_q;
 	auto process = QProcess();
-	process.start(program, argsFor(tempPath));
+	process.start(program, argsFor(u"-"_q));
 	auto errors = QByteArray();
 	for (auto waited = 0; waited < kSevenZipExtractTimeout; waited += kSevenZipPollStep) {
 		if (process.waitForFinished(kSevenZipPollStep)) {
@@ -863,21 +861,12 @@ constexpr auto kPageRenderWidth = 640;
 	if (errors.size() < 512) {
 		errors += process.readAllStandardError();
 	}
-	auto file = QFile(tempPath);
-	auto result = QByteArray();
-	if (file.open(QIODevice::ReadOnly) && file.size() <= kSevenZipEntryCap) {
-		result = file.readAll();
-	}
-	file.close();
-	QFile::remove(tempPath);
-	if (result.isEmpty()) {
-		const auto details = errors.isEmpty()
-			? process.errorString()
-			: QString::fromUtf8(errors);
-		LOG(("Document cover render produced no output, errors: %1.").arg(
-			details.simplified().left(300)));
-	}
-	return result;
+	const auto details = errors.isEmpty()
+		? process.errorString()
+		: QString::fromUtf8(errors);
+	LOG(("Document cover render produced no output, errors: %1.").arg(
+		details.simplified().left(300)));
+	return {};
 }
 
 [[nodiscard]] QImage TryDjvuPageCover(const QString &filepath) {
@@ -897,42 +886,38 @@ constexpr auto kPageRenderWidth = 640;
 		+ u'x'
 		+ QString::number(kPageRenderWidth);
 	for (auto page = 1; page <= kPageCoverPages; ++page) {
-		const auto tempPath = QDir::tempPath()
-			+ u"/tdesktop_djvu_"_q
-			+ QUuid::createUuid().toString(QUuid::WithoutBraces)
-			+ u".ppm"_q;
 		auto process = QProcess();
 		process.start(ddjvu, {
 			u"-format=ppm"_q,
 			u"-page="_q + QString::number(page),
 			sizeArg,
 			filepath,
-			tempPath,
 		});
+		auto bytes = QByteArray();
 		auto errors = QByteArray();
 		for (auto waited = 0; waited < kSevenZipExtractTimeout; waited += kSevenZipPollStep) {
 			if (process.waitForFinished(kSevenZipPollStep)) {
 				break;
 			}
-			process.readAllStandardOutput();
+			bytes += process.readAllStandardOutput();
 			if (errors.size() < 512) {
 				errors += process.readAllStandardError();
+			}
+			if (bytes.size() > kSevenZipEntryCap) {
+				break;
 			}
 		}
 		if (process.state() != QProcess::NotRunning) {
 			process.kill();
 			process.waitForFinished(kSevenZipPollStep);
 		}
-		process.readAllStandardOutput();
+		bytes += process.readAllStandardOutput();
 		if (errors.size() < 512) {
 			errors += process.readAllStandardError();
 		}
-		auto file = QFile(tempPath);
-		const auto bytes = (file.open(QIODevice::ReadOnly) && file.size() <= kSevenZipEntryCap)
-			? file.readAll()
-			: QByteArray();
-		file.close();
-		QFile::remove(tempPath);
+		if (bytes.size() > kSevenZipEntryCap) {
+			bytes.clear();
+		}
 		if (bytes.isEmpty()) {
 			const auto details = errors.isEmpty()
 				? (process.exitCode() == -1073741515
@@ -964,7 +949,8 @@ constexpr auto kPageRenderWidth = 640;
 			break;
 		}
 		auto image = QImage::fromData(output);
-		if (!image.isNull() && !Images::IsBlank(image)) {
+		const auto blank = image.isNull() || Images::IsBlank(image);
+		if (!blank) {
 			return image;
 		}
 	}
@@ -2305,24 +2291,18 @@ bool FileLoadTask::CheckForDocument(
 	};
 
 	auto image = [&]() -> QImage {
-		if (filepath.endsWith(u".djvu"_q, Qt::CaseInsensitive)
-			|| filepath.endsWith(u".djv"_q, Qt::CaseInsensitive)) {
+		const auto djvu = filepath.endsWith(u".djvu"_q, Qt::CaseInsensitive)
+			|| filepath.endsWith(u".djv"_q, Qt::CaseInsensitive);
+		if (djvu) {
 			if (auto cover = TryDjvuPageCover(filepath); !cover.isNull()) {
 				return cover;
 			}
+			return {};
 		}
 		const auto rtf = filepath.endsWith(u".rtf"_q, Qt::CaseInsensitive);
 		if (rtf) {
 			if (auto cover = TryRtfCover(filepath); !cover.isNull()) {
 				return cover;
-			}
-		}
-		const auto odf = filepath.endsWith(u".odt"_q, Qt::CaseInsensitive)
-			|| filepath.endsWith(u".ods"_q, Qt::CaseInsensitive)
-			|| filepath.endsWith(u".odp"_q, Qt::CaseInsensitive);
-		if (odf) {
-			if (auto sumatra = TrySumatraPageCover(filepath); !sumatra.isNull()) {
-				return sumatra;
 			}
 		}
 		if (auto cover = TrySevenZipDocumentCover(filepath); !cover.isNull()) {
@@ -2331,13 +2311,17 @@ bool FileLoadTask::CheckForDocument(
 		if (filepath.endsWith(u".mobi"_q, Qt::CaseInsensitive)
 			|| filepath.endsWith(u".prc"_q, Qt::CaseInsensitive)
 			|| filepath.endsWith(u".azw"_q, Qt::CaseInsensitive)
-			|| filepath.endsWith(u".azw3"_q, Qt::CaseInsensitive)
-			|| filepath.endsWith(u".azw4"_q, Qt::CaseInsensitive)) {
+			|| filepath.endsWith(u".azw3"_q, Qt::CaseInsensitive)) {
 			if (auto cover = tryExtractMobiCover(); !cover.isNull()) {
 				return cover;
 			}
 		}
-		if (!odf && !rtf) {
+		const auto noSumatraFallback = rtf
+			|| filepath.endsWith(u".azw"_q, Qt::CaseInsensitive)
+			|| filepath.endsWith(u".azw3"_q, Qt::CaseInsensitive)
+			|| filepath.endsWith(u".azw4"_q, Qt::CaseInsensitive)
+			|| filepath.endsWith(u".chm"_q, Qt::CaseInsensitive);
+		if (!noSumatraFallback) {
 			if (auto sumatra = TrySumatraPageCover(filepath); !sumatra.isNull()) {
 				return sumatra;
 			}
@@ -2580,10 +2564,10 @@ void FileLoadTask::process(ProcessArgs &&args) {
 
 	if (filename.endsWith(u".htm"_q, Qt::CaseInsensitive)) {
 		attributes[0] = MTP_documentAttributeFilename(MTP_string(
-			QString(filename).chopped(4) + u"[htm].xhtml"_q));
+			QString(filename).chopped(4) + u".[htm].xhtml"_q));
 	} else if (filename.endsWith(u".html"_q, Qt::CaseInsensitive)) {
 		attributes[0] = MTP_documentAttributeFilename(MTP_string(
-			QString(filename).chopped(5) + u"[html].xhtml"_q));
+			QString(filename).chopped(5) + u".[html].xhtml"_q));
 	}
 
 	auto thumbnail = PreparedFileThumbnail();
@@ -2742,7 +2726,7 @@ void FileLoadTask::process(ProcessArgs &&args) {
 				const auto lowerName = QString(filename).toLower();
 				if (filename.endsWith(u".webm"_q, Qt::CaseInsensitive)) {
 					attributes[0] = MTP_documentAttributeFilename(MTP_string(
-						QString(filename).chopped(5) + u"[webm].mp4"_q));
+						QString(filename).chopped(5) + u".[webm].mp4"_q));
 				}
 			}
 

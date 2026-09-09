@@ -661,6 +661,7 @@ private:
 		not_null<HistoryItem*> item,
 		const MessageGroupId &groupId);
 	void sendAlbumIfReady(not_null<SendingAlbum*> album);
+	void pumpSendingAlbums();
 	void sendMedia(
 		not_null<HistoryItem*> item,
 		const MTPInputMedia &media,
@@ -815,6 +816,8 @@ private:
 
 	std::unique_ptr<TaskQueue> _fileLoader;
 	base::flat_map<uint64, std::shared_ptr<SendingAlbum>> _sendingAlbums;
+	uint64 _albumSendOrder = 0;
+	bool _pumpingAlbums = false;
 
 	base::flat_set<not_null<const Data::ForumTopic*>> _updateNotifyTopics;
 	base::flat_set<not_null<const PeerData*>> _updateNotifyPeers;

@@ -5111,6 +5111,8 @@ void ApiWrap::sendFiles(
 	}
 	if (album) {
 		_sendingAlbums.emplace(album->groupId, album);
+		album->sendOrder = ++_albumSendOrder;
+		album->peerId = action.history->peer->id;
 		album->items.reserve(tasks.size());
 		for (const auto &task : tasks) {
 			album->items.emplace_back(task->id());
@@ -6237,6 +6239,7 @@ void ApiWrap::sendMultiPaidMedia(
 			}
 			history->owner().destroyMessagesWithCacheCleanup(items);
 		}
+		pumpSendingAlbums();
 		if (done) done(true);
 	}, [=](const MTP::Error &error, const MTP::Response &response) {
 		if (done) done(false);
@@ -6277,6 +6280,32 @@ void ApiWrap::sendAlbumWithCancelled(
 	sendAlbumIfReady(album.get());
 }
 
+void ApiWrap::pumpSendingAlbums() {
+	if (_pumpingAlbums) {
+		return;
+	}
+	_pumpingAlbums = true;
+	auto ordered = std::vector<std::shared_ptr<SendingAlbum>>();
+	ordered.reserve(_sendingAlbums.size());
+	for (const auto &entry : _sendingAlbums) {
+		ordered.push_back(entry.second);
+	}
+	std::sort(
+		begin(ordered),
+		end(ordered),
+		[](const auto &a, const auto &b) {
+			return a->sendOrder < b->sendOrder;
+		});
+	for (const auto &album : ordered) {
+		if (_sendingAlbums.find(album->groupId)
+			== _sendingAlbums.end()) {
+			continue;
+		}
+		sendAlbumIfReady(album.get());
+	}
+	_pumpingAlbums = false;
+}
+
 void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 	if (album->sent) {
 		return;
@@ -6284,6 +6313,18 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 	const auto groupId = album->groupId;
 	if (album->items.empty()) {
 		_sendingAlbums.remove(groupId);
+		pumpSendingAlbums();
+		return;
+	}
+	for (const auto &entry : _sendingAlbums) {
+		const auto &other = entry.second;
+		if (other.get() == album
+			|| other->sent
+			|| other->peerId != album->peerId
+			|| other->sendOrder >= album->sendOrder
+			|| other->items.empty()) {
+			continue;
+		}
 		return;
 	}
 	auto sample = (HistoryItem*)nullptr;
@@ -6303,6 +6344,7 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 	}
 	if (!sample) {
 		_sendingAlbums.remove(groupId);
+		pumpSendingAlbums();
 		return;
 	}
 	const auto replyTo = sample->replyTo();
@@ -6321,6 +6363,7 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 			}
 		}
 		_sendingAlbums.remove(groupId);
+		pumpSendingAlbums();
 		for (const auto &[partItem, media] : parts) {
 			_session->ephemeralMessages().sendMedia(partItem, media);
 		}
@@ -6347,6 +6390,7 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 					historyPeer->id);
 			});
 		_sendingAlbums.remove(groupId);
+		pumpSendingAlbums();
 		return;
 	}
 	const auto history = sample->history();
@@ -6413,6 +6457,7 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 			EnhancedForward::markItemSent(&session(), peer->id);
 		}
 		_sendingAlbums.remove(groupId);
+		pumpSendingAlbums();
 	}, [=](const MTP::Error &error,
 			const MTP::Response &response) {
 		if (const auto album = _sendingAlbums.take(groupId)) {
@@ -6422,6 +6467,7 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 		} else {
 			sendMessageFail(error, peer);
 		}
+		pumpSendingAlbums();
 	});
 }
 
