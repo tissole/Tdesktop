@@ -5040,7 +5040,8 @@ void ApiWrap::sendFiles(
 		Ui::PreparedList &&list,
 		SendMediaType type,
 		std::shared_ptr<SendingAlbum> album,
-		SendAction action) {
+		SendAction action,
+		std::shared_ptr<UploadBatch> batch) {
 	const auto &ephemeral = _session->ephemeralMessages();
 	if (album && !ephemeral.isEphemeralBotReply(action.replyTo.messageId)) {
 		const auto peer = action.history->peer;
@@ -5048,6 +5049,11 @@ void ApiWrap::sendFiles(
 			if (ephemeral.hasEphemeralCommand(peer, file.caption.text)) {
 				LOG(("API Error: "
 					"Dropped album send with ephemeral command caption."));
+				if (batch) {
+					for (auto i = 0; i != int(list.files.size()); ++i) {
+						batch->addFailed();
+					}
+				}
 				return;
 			}
 		}
@@ -5059,6 +5065,9 @@ void ApiWrap::sendFiles(
 	const auto to = FileLoadTaskOptions(action);
 	if (album) {
 		album->options = to.options;
+	}
+	if (!batch && !list.files.empty()) {
+		batch = Api::MakeUploadBatch(int(list.files.size()));
 	}
 	auto tasks = std::vector<std::unique_ptr<Task>>();
 	tasks.reserve(list.files.size());
@@ -5102,6 +5111,7 @@ void ApiWrap::sendFiles(
 			.caption = std::move(file.caption),
 			.spoiler = file.spoiler,
 			.album = album,
+			.batch = batch,
 			.forceFile = forceFile,
 			.sendLargePhotos = file.sendLargePhotos,
 			.animationJob = file.animationJob,
@@ -6421,12 +6431,6 @@ void ApiWrap::sendAlbumIfReady(not_null<SendingAlbum*> album) {
 	auto &histories = history->owner().histories();
 	const auto peer = history->peer;
 	album->sent = true;
-	if (medias.size() >= 2) {
-		Ui::Toast::Show(tr::lng_tm_ul_done(
-			tr::now,
-			lt_count,
-			int(medias.size())));
-	}
 	// Capture message pointers before sending (setRealId changes ids).
 	auto albumMsgs = std::make_shared<std::vector<
 		not_null<HistoryItem*>>>();

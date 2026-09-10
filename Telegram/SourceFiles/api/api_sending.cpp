@@ -1253,6 +1253,37 @@ void AddConfirmedLocalPlaceholder(const ConfirmedLocalFile &local) {
 	}
 }
 
+static void TrackBatchUpload(
+		not_null<Main::Session*> session,
+		FullMsgId fullId,
+		std::shared_ptr<UploadBatch> batch) {
+	auto lifetime = std::make_shared<rpl::lifetime>();
+	const auto done = [=](const Storage::UploadedMedia &media) {
+		if (media.fullId != fullId || media.edit) {
+			return;
+		}
+		if (batch) {
+			batch->addUploaded();
+		}
+		lifetime->destroy();
+	};
+	const auto fail = [=](FullMsgId failedId) {
+		if (failedId != fullId) {
+			return;
+		}
+		if (batch) {
+			batch->addFailed();
+		}
+		lifetime->destroy();
+	};
+	session->uploader().documentReady() | rpl::on_next(done, *lifetime);
+	session->uploader().photoReady() | rpl::on_next(done, *lifetime);
+	session->uploader().secondaryFileReady() | rpl::on_next(done, *lifetime);
+	session->uploader().documentFailed() | rpl::on_next(fail, *lifetime);
+	session->uploader().photoFailed() | rpl::on_next(fail, *lifetime);
+	session->uploader().secondaryFileFailed() | rpl::on_next(fail, *lifetime);
+}
+
 [[nodiscard]] bool FlushPreparedMusicBatch(
 		not_null<Main::Session*> session,
 		const std::shared_ptr<FilePrepareResult> &sample) {
@@ -1287,6 +1318,9 @@ void AddConfirmedLocalPlaceholder(const ConfirmedLocalFile &local) {
 	}
 	for (const auto &local : locals) {
 		session->uploader().upload(local.newId, local.file);
+		if (local.file->batch && !local.itemToEdit) {
+			TrackBatchUpload(session, local.newId, local.file->batch);
+		}
 	}
 
 	if (notifyHistory) {
@@ -1301,6 +1335,30 @@ void AddConfirmedLocalPlaceholder(const ConfirmedLocalFile &local) {
 }
 
 } // namespace
+
+static void ShowUploadBatchDone(int uploaded, int duplicates) {
+	if (uploaded <= 0 && duplicates <= 0) {
+		return;
+	}
+	if (uploaded > 0 && duplicates > 0) {
+		const auto uploadedText = tr::lng_tm_ul_done(tr::now, lt_count, uploaded);
+		const auto duplicatesText = tr::lng_tm_ul_duplicates_skipped(tr::now, lt_count, duplicates);
+		Ui::Toast::Show(uploadedText + u", "_q + duplicatesText);
+	} else if (uploaded > 0) {
+		Ui::Toast::Show(tr::lng_tm_ul_done(tr::now, lt_count, uploaded));
+	} else {
+		Ui::Toast::Show(tr::lng_tm_ul_duplicates_skipped(tr::now, lt_count, duplicates));
+	}
+}
+
+std::shared_ptr<UploadBatch> MakeUploadBatch(int total) {
+	auto batch = std::make_shared<UploadBatch>();
+	batch->total = total;
+	batch->onDone = [](int uploaded, int duplicates) {
+		ShowUploadBatchDone(uploaded, duplicates);
+	};
+	return batch;
+}
 
 static void TrackSingleUploadDoneToast(
 		not_null<Main::Session*> session,
@@ -1323,12 +1381,18 @@ void SendConfirmedFile(
 		const std::shared_ptr<FilePrepareResult> &file) {
 	const auto welcomeTemplate = file->to.options.welcomeTemplate;
 	if (welcomeTemplate && file->to.replaceMediaOf) {
+		if (file->batch) {
+			file->batch->addFailed();
+		}
 		return;
 	}
 	if (welcomeTemplate) {
 		const auto history = session->data().history(file->to.peer);
 		if (session->welcomeMessages().count(history)
 			>= Data::WelcomeMessagesLimit(session)) {
+			if (file->batch) {
+				file->batch->addFailed();
+			}
 			return;
 		}
 	}
@@ -1344,8 +1408,12 @@ void SendConfirmedFile(
 			history->peer->starsPerMessageChecked(),
 			file->to.options.starsApproved));
 	if (session->uploader().checkUploadDuplicate(local.newId, file)) {
-		Core::App().downloadManager().reportDuplicateSkipped(
+		if (file->batch) {
+			file->batch->addDuplicate();
+		} else {
+			Core::App().downloadManager().reportDuplicateSkipped(
 			Data::DedupDb::Table::Uploads);
+		}
 		// A skipped duplicate can't provide media, so drop it from the album
 		// and fix the expected count - otherwise the album waits on it forever
 		// and is never sent.
@@ -1367,7 +1435,13 @@ void SendConfirmedFile(
 	session->api().sendAction(local.action);
 	AddConfirmedLocalPlaceholder(local);
 
-	if (!file->album && !local.itemToEdit) {
+	if (file->batch) {
+		if (!local.itemToEdit) {
+			TrackBatchUpload(session, local.newId, file->batch);
+		} else {
+			file->batch->addFailed();
+		}
+	} else if (!file->album && !local.itemToEdit) {
 		TrackSingleUploadDoneToast(session, local.newId);
 	}
 

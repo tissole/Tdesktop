@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_session_controller.h"
 
 #include "apiwrap.h"
+#include "api/api_sending.h"
 #include "boxes/send_files_box.h"
 #include "data/components/ephemeral_messages.h"
 #include "data/data_forum_topic.h"
@@ -173,11 +174,12 @@ void SessionController::sendDrawToReplyFiles(
 	};
 	auto &api = session().api();
 	auto sent = false;
+	const auto batch = Api::MakeUploadBatch(bundle->totalCount);
 	for (auto &group : bundle->groups) {
 		const auto album = (group.type != Ui::AlbumType::None)
 			? std::make_shared<SendingAlbum>()
 			: nullptr;
-		api.sendFiles(std::move(group.list), type, album, action);
+		api.sendFiles(std::move(group.list), type, album, action, batch);
 		sent = true;
 	}
 	if (sent) {

@@ -1551,6 +1551,7 @@ FilePrepareResult::FilePrepareResult(FilePrepareDescriptor &&descriptor)
 , id(descriptor.id)
 , to(std::move(descriptor.to))
 , album(std::move(descriptor.album))
+, batch(std::move(descriptor.batch))
 , type(descriptor.type)
 , caption(std::move(descriptor.caption))
 , spoiler(descriptor.spoiler) {
@@ -1596,6 +1597,7 @@ FileLoadTask::FileLoadTask(Args &&args)
 , _dcId(args.session->mainDcId())
 , _to(std::move(args.to))
 , _album(std::move(args.album))
+, _batch(std::move(args.batch))
 , _filepath(std::move(args.filepath))
 , _displayName(std::move(args.displayName))
 , _content(std::move(args.content))
@@ -2366,6 +2368,7 @@ void FileLoadTask::process(ProcessArgs &&args) {
 		.caption = _caption,
 		.spoiler = _spoiler,
 		.album = _album,
+		.batch = _batch,
 	});
 	if (const auto cover = _videoCover.get()) {
 		cover->process();
@@ -2902,6 +2905,9 @@ void FileLoadTask::process(ProcessArgs &&args) {
 void FileLoadTask::finish() {
 	const auto session = _session.get();
 	if (!session) {
+		if (_batch) {
+			_batch->addFailed();
+		}
 		return;
 	}
 	const auto premium = session->user()->isPremium();
@@ -2910,12 +2916,18 @@ void FileLoadTask::finish() {
 			Ui::MakeInformBox(
 				tr::lng_send_image_empty(tr::now, lt_name, _filepath)),
 			Ui::LayerOption::KeepOther);
+		if (_batch) {
+			_batch->addFailed();
+		}
 		removeFromAlbum();
 	} else if (_result->filesize > kFileSizePremiumLimit
 		|| (_result->filesize > kFileSizeLimit && !premium)) {
 		Ui::show(
 			Box(FileSizeLimitBox, session, _result->filesize, nullptr),
 			Ui::LayerOption::KeepOther);
+		if (_batch) {
+			_batch->addFailed();
+		}
 		removeFromAlbum();
 	} else if (_album && _album->preparedMusicBatching()) {
 		const auto it = ranges::find(_album->items, id(), &SendingAlbum::Item::taskId);

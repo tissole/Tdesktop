@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_common.h"
 
 #include <memory>
+#include <functional>
 
 namespace Ui {
 struct PreparedFileInformation;
@@ -117,6 +118,40 @@ private:
 
 };
 
+struct UploadBatch {
+	int total = 0;
+	int uploaded = 0;
+	int duplicates = 0;
+	int failed = 0;
+	bool done = false;
+	std::function<void(int uploaded, int duplicates)> onDone;
+
+	void addUploaded() {
+		++uploaded;
+		checkDone();
+	}
+	void addDuplicate() {
+		++duplicates;
+		checkDone();
+	}
+	void addFailed() {
+		++failed;
+		checkDone();
+	}
+	void checkDone() {
+		if (done || total <= 0) {
+			return;
+		}
+		if (uploaded + duplicates + failed < total) {
+			return;
+		}
+		done = true;
+		if (onDone) {
+			onDone(uploaded, duplicates);
+		}
+	}
+};
+
 struct SendingAlbum {
 	struct Item {
 		explicit Item(TaskId taskId);
@@ -181,6 +216,7 @@ struct FilePrepareDescriptor {
 	TextWithTags caption;
 	bool spoiler = false;
 	std::shared_ptr<SendingAlbum> album;
+	std::shared_ptr<UploadBatch> batch;
 };
 struct FilePrepareResult {
 	explicit FilePrepareResult(FilePrepareDescriptor &&descriptor);
@@ -191,6 +227,7 @@ struct FilePrepareResult {
 	uint64 fileId = 0; // explicit file_id for saveFilePart (0 = use id/thumbId)
 	FileLoadTo to;
 	std::shared_ptr<SendingAlbum> album;
+	std::shared_ptr<UploadBatch> batch;
 	SendMediaType type = SendMediaType::File;
 	QString filepath;
 	QByteArray content;
@@ -264,6 +301,7 @@ public:
 		TextWithTags caption;
 		bool spoiler = false;
 		std::shared_ptr<SendingAlbum> album;
+		std::shared_ptr<UploadBatch> batch;
 		bool forceFile = false;
 		bool sendLargePhotos = false;
 		std::shared_ptr<Media::Encode::Job> animationJob;
@@ -331,6 +369,7 @@ private:
 	MTP::DcId _dcId = 0;
 	FileLoadTo _to;
 	const std::shared_ptr<SendingAlbum> _album;
+	const std::shared_ptr<UploadBatch> _batch;
 	QString _filepath;
 	QString _displayName;
 	QByteArray _content;

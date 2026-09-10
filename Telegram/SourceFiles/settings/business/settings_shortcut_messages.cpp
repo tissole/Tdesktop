@@ -1404,11 +1404,12 @@ void ShortcutMessages::sendingFilesConfirmed(
 	auto action = prepareSendAction(options);
 	action.clearDraft = false;
 	auto &api = _session->api();
+	const auto batch = Api::MakeUploadBatch(bundle->totalCount);
 	for (auto &group : bundle->groups) {
 		const auto album = (group.type != Ui::AlbumType::None)
 			? std::make_shared<SendingAlbum>()
 			: nullptr;
-		api.sendFiles(std::move(group.list), type, album, action);
+		api.sendFiles(std::move(group.list), type, album, action, batch);
 	}
 	if (_composeControls->replyingToMessage() == action.replyTo) {
 		_composeControls->cancelReplyMessage();

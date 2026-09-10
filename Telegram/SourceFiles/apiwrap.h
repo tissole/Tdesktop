@@ -17,6 +17,7 @@ class TaskQueue;
 class HistoryItem;
 struct MessageGroupId;
 struct SendingAlbum;
+struct UploadBatch;
 enum class SendMediaType;
 struct FileLoadTo;
 struct ChatRestrictionsInfo;
@@ -392,7 +393,8 @@ public:
 		Ui::PreparedList &&list,
 		SendMediaType type,
 		std::shared_ptr<SendingAlbum> album,
-		SendAction action);
+		SendAction action,
+		std::shared_ptr<UploadBatch> batch = nullptr);
 	void sendFile(
 		const QByteArray &fileContent,
 		SendMediaType type,

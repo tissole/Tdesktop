@@ -1798,6 +1798,7 @@ void MusicAttachBox(
 			? SendMediaType::Photo
 			: SendMediaType::File;
 		auto &api = controller->session().api();
+		const auto batch = Api::MakeUploadBatch(bundle->totalCount);
 		for (auto &group : bundle->groups) {
 			const auto optionsRequireSingle
 				= action.options.scheduleRepeatPeriod
@@ -1809,7 +1810,7 @@ void MusicAttachBox(
 			if (album && (group.type == Ui::AlbumType::Music)) {
 				album->musicPreparedBatching = true;
 			}
-			api.sendFiles(std::move(group.list), type, album, action);
+			api.sendFiles(std::move(group.list), type, album, action, batch);
 		}
 		box->closeBox();
 	};

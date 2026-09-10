@@ -17,6 +17,7 @@ class History;
 class PhotoData;
 class DocumentData;
 struct FilePrepareResult;
+struct UploadBatch;
 
 namespace Data {
 struct InputVenue;
@@ -66,5 +67,7 @@ void FillMessagePostFlags(
 void SendConfirmedFile(
 	not_null<Main::Session*> session,
 	const std::shared_ptr<FilePrepareResult> &file);
+
+[[nodiscard]] std::shared_ptr<UploadBatch> MakeUploadBatch(int total);
 
 } // namespace Api
