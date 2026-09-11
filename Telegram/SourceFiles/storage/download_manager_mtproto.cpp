@@ -642,19 +642,7 @@ void DownloadMtprotoTask::normalPartLoaded(
 	result.match([&](const MTPDupload_fileCdnRedirect &data) {
 		switchToCDN(requestData, data);
 	}, [&](const MTPDupload_file &data) {
-		const auto &bytes = data.vbytes().v;
-		if (bytes.isEmpty()) {
-			return;
-		}
-		if (bytes.size() >= 2
-			&& bytes[0] == char(0xFF)
-			&& bytes[1] == char(0xD8)
-			&& (bytes.size() < 2
-				|| bytes[bytes.size() - 2] != char(0xFF)
-				|| bytes[bytes.size() - 1] != char(0xD9))) {
-			return;
-		}
-		partLoaded(requestData.offset, bytes);
+		partLoaded(requestData.offset, data.vbytes().v);
 	});
 
 	// 'this' may be deleted at this point.
