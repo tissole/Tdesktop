@@ -444,9 +444,6 @@ private:
 	std::deque<int> _dedupPrecheckQueue;
 };
 
-// Shows the unified forward completion toast
-// (lng_tm_fw_done / lng_tm_fw_done_skipped), e.g. "Sent 5 of 8" with
-// ", (3 duplicates skipped)" appended when skipped > 0.
 void ShowForwardDoneToast(int sent, int total, int skipped);
 
 } // namespace EnhancedForward
