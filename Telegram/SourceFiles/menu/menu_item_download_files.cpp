@@ -255,6 +255,9 @@ void AddAction(
 		}
 	};
 	const auto saveDocuments = [=](const QString &folderPath) {
+		const auto batch = folderPath.isEmpty() && !documents.empty()
+			? MakeDownloadBatch(int(documents.size()))
+			: nullptr;
 		for (const auto &[document, origin] : documents) {
 			if (!folderPath.isEmpty()) {
 				const auto name =
@@ -266,7 +269,7 @@ void AddAction(
 					false,
 					true);
 			} else {
-				DocumentSaveClickHandler::SaveAndTrack(origin, document);
+				DocumentSaveClickHandler::SaveAndTrack(origin, document, DocumentSaveClickHandler::Mode::ToCacheOrFile, nullptr, batch);
 			}
 		}
 	};

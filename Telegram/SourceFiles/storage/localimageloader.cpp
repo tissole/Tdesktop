@@ -1892,6 +1892,8 @@ bool FileLoadTask::CheckForVideo(
 		u"video/dvd"_q,
 		u"video/mp2t"_q,
 		u"video/mp4"_q,
+		u"video/3gpp"_q,
+		u"video/3g2"_q,
 		u"video/mpeg"_q,
 		u"video/msvideo"_q,
 		u"video/ogg"_q,
@@ -1911,6 +1913,9 @@ bool FileLoadTask::CheckForVideo(
 		u"video/x-quicktime"_q,
 	};
 	static const auto extensions = {
+		u".3gp"_q,
+		u".3gpp"_q,
+		u".3g2"_q,
 		u".asf"_q,
 		u".asx"_q,
 		u".avi"_q,
@@ -2703,9 +2708,19 @@ void FileLoadTask::process(ProcessArgs &&args) {
 					video->duration);
 			}
 			if (!_forceFile) {
-				if (gif && !_album && (filemime == u"video/mp4"_q)) {
+				if (gif
+					&& !_album
+					&& (filemime == u"video/mp4"_q)
+					&& filename.endsWith(
+						u".mp4"_q,
+						Qt::CaseInsensitive)) {
 					attributes.push_back(MTP_documentAttributeAnimated());
 				}
+			}
+			// Video length and dimensions are attached even when sending
+			// as a document (except inside albums), so what ffmpeg reads
+			// at prepare time reaches the bubble instead of zero.
+			if (!_forceFile || !_album) {
 				auto flags = MTPDdocumentAttributeVideo::Flags(0);
 				if (video->supportsStreaming) {
 					flags |= MTPDdocumentAttributeVideo::Flag::f_supports_streaming;
@@ -2726,7 +2741,8 @@ void FileLoadTask::process(ProcessArgs &&args) {
 					MTPint(),
 					MTP_double(startTs / 1000.),
 					MTPstring()));
-				const auto lowerName = QString(filename).toLower();
+			}
+			if (!_forceFile) {
 				if (filename.endsWith(u".webm"_q, Qt::CaseInsensitive)) {
 					attributes[0] = MTP_documentAttributeFilename(MTP_string(
 						QString(filename).chopped(5) + u".[webm].mp4"_q));

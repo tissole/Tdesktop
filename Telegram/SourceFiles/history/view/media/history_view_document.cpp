@@ -2188,10 +2188,10 @@ QSize Document::sizeForGroupingOptimal(int maxWidth, bool last) const {
 			if (document->isSong()) {
 				finalHeight = visualBottomOfElement + 11;
 			} else {
-				finalHeight = visualBottomOfElement + 10;
+				finalHeight = visualBottomOfElement + 7;
 			}
 		} else {
-			finalHeight = visualBottomOfElement + 10; 
+			finalHeight = visualBottomOfElement + 7;
 		}
 	}
 	height = finalHeight;
@@ -2234,10 +2234,10 @@ QSize Document::sizeForGrouping(int width) const {
 			if (document->isSong()) {
 				finalHeight = visualBottomOfElement + 11;
 			} else {
-				finalHeight = visualBottomOfElement + 10;
+				finalHeight = visualBottomOfElement + 7;
 			}
 		} else {
-			finalHeight = visualBottomOfElement + 10; 
+			finalHeight = visualBottomOfElement + 7;
 		}
 	}
 	height = finalHeight;

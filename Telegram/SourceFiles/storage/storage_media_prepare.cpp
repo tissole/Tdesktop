@@ -440,6 +440,9 @@ void PrepareDetails(PreparedFile &file, int previewWidth, int sideLimit) {
 				coverInfo->media = coverImageInfo;
 
 				coverFile->information = std::move(coverInfo);
+				coverFile->preview = video->thumbnail;
+				coverFile->originalDimensions = video->thumbnail.size();
+				coverFile->shownDimensions = PrepareShownDimensions(video->thumbnail, sideLimit);
 
 				file.videoCover = std::move(coverFile);
 			}

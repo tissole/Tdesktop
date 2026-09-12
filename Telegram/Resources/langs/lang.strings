@@ -9002,8 +9002,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_tm_fw_clear" = "Clear forwards from UI";
 "lng_tm_fw_duplicates_skipped#one" = "{count} duplicate skipped";
 "lng_tm_fw_duplicates_skipped#other" = "{count} duplicates skipped";
-"lng_tm_fw_done" = "Sent {done} of {total}";
-"lng_tm_fw_done_skipped" = "Sent {done} of {total} ({skipped} duplicates skipped)";
+"lng_tm_fw_forwarded#one" = "Forwarded {count} file";
+"lng_tm_fw_forwarded#other" = "Forwarded {count} files";
 "lng_tm_fw_upload_failed" = "Failed to upload {file_name}. The enhanced forward has been paused. You can resume it from the Forwards tab.";
 "lng_forward_group_preserve" = "Preserve grouping";
 "lng_tm_fw_download_failed" = "Failed to download {file_name}. The enhanced forward has been paused. You can resume it from the Forwards tab.";

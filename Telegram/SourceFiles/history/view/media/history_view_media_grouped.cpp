@@ -55,12 +55,16 @@ std::vector<Ui::GroupMediaLayout> LayoutPlaylist(
 			std::less<>(),
 			&QSize::width)->width();
 	auto top = 0;
-	for (const auto &size : sizes) {
+	const auto skip = st::historyGroupSkip;
+	for (auto i = 0, count = int(sizes.size()); i != count; ++i) {
 		result.push_back({
-			.geometry = QRect(0, top, width, size.height()),
+			.geometry = QRect(0, top, width, sizes[i].height()),
 			.sides = RectPart::Left | RectPart::Right
 		});
-		top += size.height();
+		top += sizes[i].height();
+		if (i + 1 != count) {
+			top += skip;
+		}
 	}
 	result.front().sides |= RectPart::Top;
 	result.back().sides |= RectPart::Bottom;
@@ -93,8 +97,10 @@ void GroupedMedia::drawMessageIdInfo(
 		if (msgId > 0) {
 			if (!infoText.isEmpty()) {
 				infoText += ' ';
+				infoText += QString("(%1)").arg(msgId.bare);
+			} else {
+				infoText += QString::number(msgId.bare);
 			}
-			infoText += QString("(%1)").arg(msgId.bare);
 		}
 	}
 
@@ -377,12 +383,16 @@ QSize GroupedMedia::countCurrentSize(int newWidth) {
 		return { newWidth, newHeight };
 	} else if (_mode == Mode::Column) {
 		auto top = 0;
-		for (auto i = 0; i < _parts.size(); ++i) {
+		const auto skip = st::historyGroupSkip;
+		for (auto i = 0; i != _parts.size(); ++i) {
 			auto &part = _parts[i];
 			auto size = part.content->sizeForGrouping(newWidth);
 
 			part.geometry = QRect(0, top, newWidth, size.height());
 			top += size.height();
+			if (i + 1 != _parts.size()) {
+				top += skip;
+			}
 		}
 		newHeight = top;
 	} else {
@@ -831,8 +841,10 @@ void GroupedMedia::draw(Painter &p, const PaintContext &context) const {
 			&part.cacheKey,
 			&part.cache);
 
-		// --- Draw Grid Mode Overlays (Video duration) ---
-		if (_mode == Mode::Grid && showInfo) {
+		// --- Draw Video Duration Overlays ---
+		// Grid and file-playlist rows alike show duration and size
+		// inside video parts, so mixed groups don't lose that info.
+		if (showInfo) {
 			const auto dataMedia = part.item->media();
 			qint64 durSeconds = -1;
 			qint64 sizeBytes = -1;
@@ -854,14 +866,17 @@ void GroupedMedia::draw(Painter &p, const PaintContext &context) const {
 				}
 			}
 
-			if (durSeconds >= 0 && sizeBytes > 0) {
+			if (sizeBytes > 0) {
 				const auto font = st::msgDateFont;
 				const auto sti = context.imageStyle();
-				const auto text = Ui::FormatDurationText(durSeconds)
-					+ QChar(' ')
-					+ QChar('(')
-					+ Ui::FormatSizeText(sizeBytes)
-					+ QChar(')');
+				const auto sizeText = Ui::FormatSizeText(sizeBytes);
+				const auto text = (durSeconds > 0)
+					? (Ui::FormatDurationText(durSeconds)
+						+ QChar(' ')
+						+ QChar('(')
+						+ sizeText
+						+ QChar(')'))
+					: sizeText;
 				const auto textWidth = font->width(text);
 				const auto textHeight = font->height;
 				const auto hPadding = 2;
@@ -988,8 +1003,12 @@ void GroupedMedia::draw(Painter &p, const PaintContext &context) const {
 				if (GetEnhancedBool("show_messages_id")) {
 					const auto msgId = item->fullId().msg;
 					if (msgId > 0) {
-						if (!infoText.isEmpty()) infoText += ' ';
-						infoText += QString("(%1)").arg(msgId.bare);
+						if (!infoText.isEmpty()) {
+							infoText += ' ';
+							infoText += QString("(%1)").arg(msgId.bare);
+						} else {
+							infoText += QString::number(msgId.bare);
+						}
 					}
 				}
 
@@ -1395,8 +1414,12 @@ TextState GroupedMedia::getPartState(
 					if (GetEnhancedBool("show_messages_id")) {
 						const auto msgId = item->fullId().msg;
 						if (msgId > 0) {
-							if (!infoText.isEmpty()) infoText += ' ';
-							infoText += QString("(%1)").arg(msgId.bare);
+							if (!infoText.isEmpty()) {
+								infoText += ' ';
+								infoText += QString("(%1)").arg(msgId.bare);
+							} else {
+								infoText += QString::number(msgId.bare);
+							}
 						}
 					}
 					if (!infoText.isEmpty()) {
@@ -1442,8 +1465,12 @@ TextState GroupedMedia::getPartState(
 				if (GetEnhancedBool("show_messages_id")) {
 					const auto msgId = item->fullId().msg;
 					if (msgId > 0) {
-						if (!infoText.isEmpty()) infoText += ' ';
-						infoText += QString("(%1)").arg(msgId.bare);
+						if (!infoText.isEmpty()) {
+							infoText += ' ';
+							infoText += QString("(%1)").arg(msgId.bare);
+						} else {
+							infoText += QString::number(msgId.bare);
+						}
 					}
 				}
 
@@ -2039,8 +2066,11 @@ bool GroupedMedia::applyGroup(const DataMediaRange &medias) {
 			_mode = mediaMode;
 			modeChosen = true;
 		} else if (mediaMode != _mode) {
-			continue;
+			_mode = Mode::Column;
+			break;
 		}
+	}
+	for (const auto media : medias) {
 		_parts.push_back(Part(_parent, media));
 	}
 	if (_parts.empty()) {

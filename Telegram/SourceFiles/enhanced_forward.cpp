@@ -238,16 +238,19 @@ std::pair<int, int> LastBatchCounts() {
 	return LastBatchCountsCache();
 }
 
-void ShowForwardDoneToast(int sent, int total, int skipped) {
-	const auto text = (skipped > 0)
-		? tr::lng_tm_fw_done_skipped(tr::now,
-			lt_done, QString::number(sent),
-			lt_total, QString::number(total),
-			lt_skipped, QString::number(skipped))
-		: tr::lng_tm_fw_done(tr::now,
-			lt_done, QString::number(sent),
-			lt_total, QString::number(total));
-	Ui::Toast::Show(text);
+void ShowForwardDoneToast(int sent, int, int skipped) {
+	if (sent <= 0 && skipped <= 0) {
+		return;
+	}
+	if (sent > 0 && skipped > 0) {
+		const auto forwardedText = tr::lng_tm_fw_forwarded(tr::now, lt_count, sent);
+		const auto duplicatesText = tr::lng_tm_fw_duplicates_skipped(tr::now, lt_count, skipped);
+		Ui::Toast::Show(forwardedText + u", "_q + duplicatesText);
+	} else if (sent > 0) {
+		Ui::Toast::Show(tr::lng_tm_fw_forwarded(tr::now, lt_count, sent));
+	} else {
+		Ui::Toast::Show(tr::lng_tm_fw_duplicates_skipped(tr::now, lt_count, skipped));
+	}
 }
 
 StateMap &ActiveStates() {
@@ -3394,14 +3397,6 @@ void Pipeline::premarkDuplicate(int i) {
 
 void Pipeline::startSession() {
 	const auto self = shared_from_this();
-	// The dedup pre-check has finished, so the duplicate count is known now:
-	// announce it right away instead of waiting for the whole job to end.
-	if (_skippedCount > 0) {
-		Ui::Toast::Show(tr::lng_tm_fw_duplicates_skipped(
-			tr::now,
-			lt_count,
-			_skippedCount));
-	}
 	std::vector<FullMsgId> sourceIds;
 	sourceIds.reserve(_n);
 	for (auto i = 0; i < _n; i++) {

@@ -4248,7 +4248,7 @@ void ApiWrap::forwardMessages(
 					*skippedCount = totalBeforeVal - int(filtered.size());
 					*copyItems = std::move(filtered);
 					if (copyItems->empty()) {
-						EnhancedForward::ShowForwardDoneToast(*totalBefore, *totalBefore, *skippedCount);
+						EnhancedForward::ShowForwardDoneToast(0, *totalBefore, *skippedCount);
 						Data::SetCopyAlbumProgress(0, 0);
 						if (copyShared && !--copyShared->requestsLeft) copyShared->callback();
 						return;

@@ -902,17 +902,28 @@ void Gif::draw(Painter &p, const PaintContext &context) const {
 			// Only show if media is loaded (cover/thumbnail/video) and it's not a round message
 			// and ONLY if we should show info (hover/selected).
 			if (!isRound && !sponsoredSkip && showInfo && (loaded || _data->hasThumbnail() || _data->duration() > 0 || _data->size > 0)) {
-				qint64 durSeconds = std::max<qint64>(0, _data->duration() / 1000);
+				auto durMs = _data->duration();
+				if (durMs <= 0 && streamed) {
+					const auto played = streamed->player().prepareLegacyState().length;
+					if (played != ::Media::kDurationUnavailable
+						&& played > 0) {
+						durMs = played;
+					}
+				}
+				qint64 durSeconds = std::max<qint64>(0, durMs / 1000);
 				qint64 sizeBytes = _data->size;
 
-				if (durSeconds >= 0 && sizeBytes > 0) {
+				if (sizeBytes > 0) {
 					const auto font = st::msgDateFont;
 					const auto sti = context.imageStyle();
-					const auto text = Ui::FormatDurationText(durSeconds)
-						+ QChar(' ')
-						+ QChar('(')
-						+ Ui::FormatSizeText(sizeBytes)
-						+ QChar(')');
+					const auto sizeText = Ui::FormatSizeText(sizeBytes);
+					const auto text = (durSeconds > 0)
+						? (Ui::FormatDurationText(durSeconds)
+							+ QChar(' ')
+							+ QChar('(')
+							+ sizeText
+							+ QChar(')'))
+						: sizeText;
 					const auto textWidth = font->width(text);
 					const auto textHeight = font->height;
 					const auto hPadding = 2;
@@ -2384,6 +2395,64 @@ void Gif::drawGrouped(
 	// now use the unified paintInCenter logic above to draw the icon.
 	if (cornerDownload) {
 		drawCornerStatus(p, context, geometry.topLeft());
+	}
+	if (!fullHiddenBySpoiler && !_data->isVideoMessage()) {
+		auto durMs = _data->duration();
+		if (durMs <= 0 && streamed) {
+			const auto played = streamed->player().prepareLegacyState().length;
+			if (played != ::Media::kDurationUnavailable
+				&& played > 0) {
+				durMs = played;
+			}
+		}
+		const auto durSeconds = std::max<qint64>(0, durMs / 1000);
+		const auto sizeBytes = _data->size;
+		if (sizeBytes > 0) {
+			const auto font = st::msgDateFont;
+			const auto sizeText = Ui::FormatSizeText(sizeBytes);
+			const auto text = (durSeconds > 0)
+				? (Ui::FormatDurationText(durSeconds)
+					+ QChar(' ')
+					+ QChar('(')
+					+ sizeText
+					+ QChar(')'))
+				: sizeText;
+			const auto textWidth = font->width(text);
+			const auto textHeight = font->height;
+			const auto hPadding = 2;
+			const auto vPadding = st::msgDateImgPadding.y();
+			const auto bubbleW = textWidth + 2 * hPadding;
+			const auto bubbleH = textHeight + 2 * vPadding;
+			if (bubbleW + 2 * st::msgDateImgDelta <= geometry.width()
+				&& bubbleH + 2 * st::msgDateImgDelta <= geometry.height()) {
+				const auto bubbleX = geometry.x()
+					+ geometry.width()
+					- bubbleW
+					- st::msgDateImgDelta;
+				const auto bubbleY = geometry.y()
+					+ geometry.height()
+					- bubbleH
+					- st::msgDateImgDelta;
+				p.save();
+				p.setOpacity(0.95);
+				Ui::FillRoundRect(
+					p,
+					bubbleX,
+					bubbleY,
+					bubbleW,
+					bubbleH,
+					sti->msgDateImgBg,
+					sti->msgDateImgBgCorners);
+				p.restore();
+
+				p.setPen(st->msgDateImgFg());
+				p.setFont(font->bold());
+				const auto baseY = bubbleY
+					+ (bubbleH - textHeight) / 2
+					+ font->ascent;
+				p.drawText(bubbleX + hPadding, baseY, text);
+			}
+		}
 	}
 }
 

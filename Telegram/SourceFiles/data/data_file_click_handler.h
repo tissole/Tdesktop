@@ -10,6 +10,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_file_origin.h"
 #include "ui/basic_click_handlers.h"
 
+#include <functional>
+#include <memory>
+
 class DocumentData;
 class HistoryItem;
 class PhotoData;
@@ -42,6 +45,42 @@ private:
 
 };
 
+struct DownloadBatch {
+	int total = 0;
+	int downloaded = 0;
+	int duplicates = 0;
+	int failed = 0;
+	bool done = false;
+	std::function<void(int downloaded, int duplicates)> onDone;
+
+	void addDownloaded() {
+		++downloaded;
+		checkDone();
+	}
+	void addDuplicate() {
+		++duplicates;
+		checkDone();
+	}
+	void addFailed() {
+		++failed;
+		checkDone();
+	}
+	void checkDone() {
+		if (done || total <= 0) {
+			return;
+		}
+		if (downloaded + duplicates + failed < total) {
+			return;
+		}
+		done = true;
+		if (onDone) {
+			onDone(downloaded, duplicates);
+		}
+	}
+};
+
+[[nodiscard]] std::shared_ptr<DownloadBatch> MakeDownloadBatch(int total);
+
 class DocumentSaveClickHandler : public DocumentClickHandler {
 public:
 	enum class Mode {
@@ -56,12 +95,14 @@ public:
 		Mode mode = Mode::ToCacheOrFile,
 		Fn<void()> started = nullptr,
 		PeerData *peer = nullptr,
-		const QString &topicName = QString());
+		const QString &topicName = QString(),
+		std::shared_ptr<DownloadBatch> batch = nullptr);
 	static void SaveAndTrack(
 		FullMsgId itemId,
 		not_null<DocumentData*> document,
 		Mode mode = Mode::ToCacheOrFile,
-		Fn<void()> started = nullptr);
+		Fn<void()> started = nullptr,
+		std::shared_ptr<DownloadBatch> batch = nullptr);
 
 protected:
 	void onClickImpl() const override;

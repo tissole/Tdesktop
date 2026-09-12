@@ -86,20 +86,54 @@ void DocumentOpenClickHandler::onClickImpl() const {
 	_handler(context());
 }
 
+static void ShowDownloadBatchDone(int downloaded, int duplicates) {
+	if (downloaded <= 0 && duplicates <= 0) {
+		return;
+	}
+	if (downloaded > 0 && duplicates > 0) {
+		const auto downloadedText = tr::lng_tm_dl_done(tr::now, lt_count, downloaded);
+		const auto duplicatesText = tr::lng_tm_dl_duplicates_skipped(tr::now, lt_count, duplicates);
+		Ui::Toast::Show(downloadedText + u", "_q + duplicatesText);
+	} else if (downloaded > 0) {
+		Ui::Toast::Show(tr::lng_tm_dl_done(tr::now, lt_count, downloaded));
+	} else {
+		Ui::Toast::Show(tr::lng_tm_dl_duplicates_skipped(tr::now, lt_count, duplicates));
+	}
+}
+
+std::shared_ptr<DownloadBatch> MakeDownloadBatch(int total) {
+	auto batch = std::make_shared<DownloadBatch>();
+	batch->total = total;
+	batch->onDone = [](int downloaded, int duplicates) {
+		ShowDownloadBatchDone(downloaded, duplicates);
+	};
+	return batch;
+}
+
 void DocumentSaveClickHandler::Save(
 		Data::FileOrigin origin,
 		not_null<DocumentData*> data,
 		Mode mode,
 		Fn<void()> started,
 		PeerData *peer,
-		const QString &topicName) {
+		const QString &topicName,
+		std::shared_ptr<DownloadBatch> batch) {
 	if (data->isNull()) {
+		if (batch) {
+			batch->addFailed();
+		}
 		return;
 	}
 
 	if (mode == Mode::ToCacheOrFile && data->saveToCache()) {
 		data->save(origin, QString());
+		if (batch) {
+			batch->addDownloaded();
+		}
 		return;
+	}
+	if (!batch) {
+		batch = MakeDownloadBatch(1);
 	}
 	InvokeQueued(qApp, crl::guard(&data->session(), [=] {
 		// If we call file dialog synchronously, it will stop
@@ -108,6 +142,9 @@ void DocumentSaveClickHandler::Save(
 		if (mode != Mode::ToNewFile && data->saveFromData()) {
 			if (started) {
 				started();
+			}
+			if (batch) {
+				batch->addDownloaded();
 			}
 			return;
 		}
@@ -127,6 +164,9 @@ void DocumentSaveClickHandler::Save(
 			peer,
 			topicName);
 		if (savename.isEmpty()) {
+			if (batch) {
+				batch->addFailed();
+			}
 			return;
 		}
 		const auto proceed = [=] {
@@ -146,7 +186,11 @@ void DocumentSaveClickHandler::Save(
 					return;
 				}
 				if (!doc->filepath(true).isEmpty()) {
-					Ui::Toast::Show(tr::lng_tm_dl_done(tr::now, lt_count, 1));
+					if (batch) {
+						batch->addDownloaded();
+					}
+				} else if (batch) {
+					batch->addFailed();
 				}
 				lifetime->destroy();
 			}, *lifetime);
@@ -156,8 +200,12 @@ void DocumentSaveClickHandler::Save(
 			data,
 			[=](bool skip) {
 				if (skip) {
-					Core::App().downloadManager().reportDuplicateSkipped(
-						Data::DedupDb::Table::Downloads);
+					if (batch) {
+						batch->addDuplicate();
+					} else {
+						Core::App().downloadManager().reportDuplicateSkipped(
+							Data::DedupDb::Table::Downloads);
+					}
 					return;
 				}
 				proceed();
@@ -169,7 +217,8 @@ void DocumentSaveClickHandler::SaveAndTrack(
 		FullMsgId itemId,
 		not_null<DocumentData*> document,
 		Mode mode,
-		Fn<void()> started) {
+		Fn<void()> started,
+		std::shared_ptr<DownloadBatch> batch) {
 	const auto item = document->owner().message(itemId);
 	const auto peer = item ? item->history()->peer.get() : nullptr;
 	auto topicName = QString();
@@ -194,7 +243,7 @@ void DocumentSaveClickHandler::SaveAndTrack(
 		if (started) {
 			started();
 		}
-	}, peer, topicName);
+	}, peer, topicName, batch);
 }
 
 void DocumentSaveClickHandler::onClickImpl() const {
