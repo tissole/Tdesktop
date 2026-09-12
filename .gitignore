@@ -77,3 +77,4 @@ settings.local.json
 *.md
 /.poolside
 /.freebuff
+/out-ninja
